@@ -41,17 +41,17 @@ FGridStruct* UPathfinder::GetTileStruct(FVector2D Tile)
 
 bool UPathfinder::IsTileOccupied(FVector2D Tile)
 {
-	return IsValid(GetTileStruct(Tile)->OccupiedByWhom);
+	return IsValid(GetTileStruct(Tile)->OccupiedBy);
 }
 
 bool UPathfinder::IsCurrentTileOccupiedByPlayer()
 {
-	return IsTileOccupied(CurrentTile) && GetTileStruct(CurrentTile)->OccupiedByWhom->isPlayer; // IsTileOccupied() is there to protect from nullptrs
+	return IsTileOccupied(CurrentTile) && GetTileStruct(CurrentTile)->OccupiedBy->Team == Team::Player; // IsTileOccupied() is there to protect from nullptrs
 }
 
 bool UPathfinder::IsCurrentTileOccupiedByEnemy()
 {
-	return IsTileOccupied(CurrentTile) && GetTileStruct(CurrentTile)->OccupiedByWhom->isPlayer == false; // IsTileOccupied() is there to protect from nullptrs
+	return IsTileOccupied(CurrentTile) && GetTileStruct(CurrentTile)->OccupiedBy->Team == Team::Enemy; // IsTileOccupied() is there to protect from nullptrs
 }
 
 TArray<FVector2D> UPathfinder::GetTileNeighbors(FVector2D Tile, bool IncludePlayers, bool IncludeEnemies)
@@ -68,37 +68,20 @@ TArray<FVector2D> UPathfinder::GetTileNeighbors(FVector2D Tile, bool IncludePlay
 	{
 		FVector2D AdjacentTile = CardinalDirection + Tile;
 
-
-		// NEED TO FIGURE OUT HOW TO DO THIS
-		/*
-		bool IsTileValid = false;
-		if (MovementArea.Num() > 0)
+		if(MovementArea.Num() > 0) // This checks if the MovementArea array has data. It only should when this is called in the FindPathToTarget function
 		{
-			// using movementarea
 			if (MovementArea.Contains(AdjacentTile))
 			{
-				IsTileValid = true;
+				goto EVALUATE;
 			}
-			
 		}
-		else
+		else if (GetTileStruct(AdjacentTile))
 		{
-			// not using movementarea
-			if (GetTileStruct(AdjacentTile))
-			{
-				IsTileValid = true;
-			}
-
-		}
-		*/
-
-		if (GetTileStruct(AdjacentTile)) // TODO maybe add another check here to only include tiles in movement range as a safeguard
-		{
-			if (IsTileOccupied(AdjacentTile))
+			EVALUATE:if (IsTileOccupied(AdjacentTile))
 			{
 				FGridStruct* AdjacentTileStruct = GetTileStruct(AdjacentTile);
-				ACharacterOMEGAPARENT* Char = AdjacentTileStruct->OccupiedByWhom;
-				if (!IncludePlayers ^ Char->isPlayer || !IncludeEnemies ^ !Char->isPlayer) // Returns true if both booleans are the same, i.e. char is a player and include players, or if an enemy and include enemies
+				ACharacterOMEGAPARENT* Char = AdjacentTileStruct->OccupiedBy;
+				if (!IncludePlayers ^ (Char->Team == Team::Player) || IncludeEnemies ^ (Char->Team == Team::Player)) // Returns true if both booleans are the same, i.e. char is a player and include players, or if an enemy and include enemies
 				{
 					OutNeighbors.AddUnique(AdjacentTile);
 				}
@@ -135,6 +118,8 @@ TArray<FVector2D> UPathfinder::BreadthSearch(FVector2D StartTile, int32 Characte
 			Queue.RemoveAt(0);
 		}
 	}
+
+	FilterRedTiles();
 	TilesToMakeRed = RedTiles;
 	CharsInRange = CharsFound;
 	return ValidTiles;
@@ -142,7 +127,6 @@ TArray<FVector2D> UPathfinder::BreadthSearch(FVector2D StartTile, int32 Characte
 
 void UPathfinder::ClearMemberVariables()
 {
-	MovementArea.Empty();
 	Queue.Empty();
 	ValidTiles.Empty();
 	RedTiles.Empty();
@@ -150,6 +134,7 @@ void UPathfinder::ClearMemberVariables()
 	Path.Empty();
 	Queue.Empty();
 	EstablishedTiles.Empty();
+	MovementArea.Empty();
 	FinalCostFromCurrentNeighbor = 0;
 }
 
@@ -175,7 +160,7 @@ void UPathfinder::EvaluateCurrentTileForBreadthSearch()
 		RedTiles.AddUnique(CurrentTile);
 		if (EnemyIsPathfindingAndCurrentTileIsOccupiedByPlayer())
 		{
-			CharsFound.AddUnique(CurrentTileStruct->OccupiedByWhom);
+			CharsFound.AddUnique(CurrentTileStruct->OccupiedBy);
 		}
 	}
 	else if (CurrentTileIsWalkable())
@@ -215,6 +200,17 @@ bool UPathfinder::CurrentTileIsWalkable()
 	MoveCost < CurrentTileStruct->FinalCost);
 }
 
+void UPathfinder::FilterRedTiles() 
+{
+	for (FVector2D RedTile : RedTiles)
+	{
+		if (ValidTiles.Contains(RedTile))
+		{
+			RedTiles.Remove(RedTile);
+		}
+	}
+}
+
 /* ==========================================
 	Breadth Search ends and Find Path starts	
 ========================================== */
@@ -222,6 +218,12 @@ bool UPathfinder::CurrentTileIsWalkable()
 
 TArray<FVector2D> UPathfinder::FindPathToTarget(TArray<FVector2D> AvailableMovementArea, FVector2D StartTile, FVector2D TargetTile, bool IsPlayerCalling)
 {
+	if (StartTile == TargetTile)
+	{
+		Path.Add(StartTile);
+		return Path;
+	}
+	
 	ClearMemberVariables();
 	ResetPathfindingTileVars();
 	MovementArea = AvailableMovementArea;
@@ -236,6 +238,8 @@ TArray<FVector2D> UPathfinder::FindPathToTarget(TArray<FVector2D> AvailableMovem
 	Queue.AddUnique(InitialTile);
 
 	Pathfind();
+	
+	MovementArea.Empty(); // I empty this so it's not effecting GetTileNeighbors function
 	return Path;
 }
 
@@ -261,7 +265,8 @@ void UPathfinder::Pathfind()
 		TArray<FVector2D> Neighbors = GetTileNeighbors(CurrentTile, IsPlayerPathfinding, !IsPlayerPathfinding);
 		for (FVector2D CurrentNeighbor : Neighbors)
 		{
-			if (!EstablishedTiles.Contains(CurrentNeighbor) || FinalCostFromCurrentNeighbor < GetTileStruct(CurrentNeighbor)->CostFromStart)
+			if (!EstablishedTiles.Contains(CurrentNeighbor) ||
+			FinalCostFromCurrentNeighbor < GetTileStruct(CurrentNeighbor)->CostFromStart)
 			{
 				FinalCostFromCurrentNeighbor = GetTileStruct(CurrentTile)->CostFromStart + GetTileStruct(CurrentNeighbor)->TileMovementCost;
 				SetTileVariables(CurrentTile, CurrentNeighbor);
@@ -311,7 +316,7 @@ bool UPathfinder::QueueElementIsBetterThanQueueCheapest(FVector2D QueueElem, FVe
 void UPathfinder::SetTileVariables(FVector2D PreviousTile, FVector2D CurrentNeighbor)
 {
 	FGridStruct* CurrentNeighborStruct = GetTileStruct(CurrentNeighbor);
-	CurrentNeighborStruct->FinalCost = FinalCostFromCurrentNeighbor + GetEstimatedCostToTile(CurrentNeighbor);
+	CurrentNeighborStruct->FinalCost = FinalCostFromCurrentNeighbor + CurrentNeighborStruct->TileMovementCost;
 	CurrentNeighborStruct->CostFromStart = FinalCostFromCurrentNeighbor;
 	CurrentNeighborStruct->EstimatedCostToTarget = GetEstimatedCostToTile(CurrentNeighbor);
 	CurrentNeighborStruct->PreviousTileCoords = PreviousTile;
@@ -334,7 +339,6 @@ TArray<FVector2D> UPathfinder::RetracePath()
 	}
 	return OutPath;
 }
-
 
 
 TArray<FVector2D> UPathfinder::FindPathAsEnemy(FVector2D StartTile, TArray<FVector2D> PossibleTargetTiles)
@@ -367,13 +371,3 @@ bool UPathfinder::IsThisFirstEnemyPathfind(TArray<FVector2D> BestPath)
 	return !BestPath.IsValidIndex(0);
 }
 
-
-
-
-
-
-
-void UPathfinder::PrintInLog()
-{
-	
-}

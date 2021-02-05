@@ -13,6 +13,7 @@ class TOPDOWN_API UPathfinder : public UActorComponent
 	GENERATED_BODY()
 
 private:
+
 	/**
 	 * 
 	 * Private Functions
@@ -22,13 +23,15 @@ private:
 	// BreadthSearch
 	int32 GetMovementOptionArea(int32 Movement);
 	void ResetFinalCosts();
-	// Evaluates tile and adds it to appropriate arrays like ValidTiles, TilesToMakeRed, and also populates the CharsInRange array
+	// Evaluates tile and adds it to appropriate arrays like ValidTiles, TilesToMakeRed, and also populates the CharsInRange array.
 	void EvaluateCurrentTileForBreadthSearch();
 	bool TileShouldBeRed();
 	bool EnemyIsPathfindingAndCurrentTileIsOccupiedByPlayer();
 	bool PlayerIsPathfindingAndCurrentTileIsOccupiedByEnemy();
 	void AddCurrentTileToValidTiles();
 	bool CurrentTileIsWalkable();
+	// Some of the tiles that clear the check to go into the RedTiles array are also in the ValidTiles, and this function removes those.
+	void FilterRedTiles();
 
 	// FindPathToTarget
 	void Pathfind();
@@ -96,6 +99,7 @@ public:
 	FGridStruct* GetTileStruct(FVector2D Tile);
 
 	UFUNCTION(BlueprintCallable, BluePrintPure)
+	// This overload is for general use
 	TArray<FVector2D> GetTileNeighbors(FVector2D Tile, bool IncludePlayers = true, bool IncludeEnemies = true);
 
 	UFUNCTION(BlueprintCallable, Category = "Grid Struct")
@@ -113,13 +117,4 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	TArray<FVector2D> FindPathAsEnemy(FVector2D StartTile, TArray<FVector2D> PossibleTargetTiles);
-		
-
-
-
-	UFUNCTION(BlueprintCallable)
-	void PrintInLog();
-
-
-
 };
