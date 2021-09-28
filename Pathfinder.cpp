@@ -9,7 +9,7 @@ UPathfinder::UPathfinder()
 {
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 
@@ -20,10 +20,7 @@ void UPathfinder::BeginPlay()
 
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AGridManager_Parent::StaticClass(), FoundActors);
-	if (FoundActors.Num() > 0)
-	{
-		GridManager = Cast<AGridManager_Parent>(FoundActors[0]);
-	}
+	if (FoundActors.Num() > 0)	GridManager = Cast<AGridManager_Parent>(FoundActors[0]);
 }
 
 
@@ -57,16 +54,17 @@ bool UPathfinder::IsCurrentTileOccupiedByEnemy()
 TArray<FVector2D> UPathfinder::GetTileNeighbors(FVector2D Tile, bool IncludePlayers, bool IncludeEnemies)
 {
 	TArray<FVector2D> OutNeighbors;
-	TArray<FVector2D> CardinalDirections;
-
-	CardinalDirections.Add(FVector2D(0, 1));  // Up
-	CardinalDirections.Add(FVector2D(1, 0));  // Right
-	CardinalDirections.Add(FVector2D(0, -1)); // Down
-	CardinalDirections.Add(FVector2D(-1, 0)); // Left
-
-	for (FVector2D CardinalDirection : CardinalDirections)
+	TArray<FVector2D> CardinalDirections = 
 	{
-		FVector2D AdjacentTile = CardinalDirection + Tile;
+		FVector2D(0, 1),  // Up
+		FVector2D(1, 0),	// Right
+		FVector2D(0, -1),	// Down
+		FVector2D(-1, 0)	// Left
+	};
+
+	for (FVector2D Direction : CardinalDirections)
+	{
+		FVector2D AdjacentTile = Direction + Tile;
 
 		if(MovementArea.Num() > 0) // This checks if the MovementArea array has data. It only should when this is called in the FindPathToTarget function
 		{
@@ -202,12 +200,19 @@ bool UPathfinder::CurrentTileIsWalkable()
 
 void UPathfinder::FilterRedTiles() 
 {
+	TArray<FVector2D> Filtered;
+	// find red tiles to filter
 	for (FVector2D RedTile : RedTiles)
 	{
 		if (ValidTiles.Contains(RedTile))
 		{
-			RedTiles.Remove(RedTile);
+			Filtered.Add(RedTile);
 		}
+	}
+	// remove them
+	for (FVector2D ToRemove : Filtered)
+	{
+		RedTiles.Remove(ToRemove);
 	}
 }
 
